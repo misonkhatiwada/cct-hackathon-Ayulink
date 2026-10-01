@@ -112,6 +112,39 @@ class _AyuLinkPatientAppState extends State<AyuLinkPatientApp> {
     return [];
   }
 
+  Map<String, dynamic> _findMapById(
+    List<Map<String, dynamic>> list,
+    String? id, [
+    Map<String, dynamic>? fallback,
+  ]) {
+    for (final item in list) {
+      if (item['id']?.toString() == id) {
+        return item;
+      }
+    }
+    if (fallback != null) return fallback;
+    if (list.isNotEmpty) return list.first;
+    return <String, dynamic>{};
+  }
+
+  String _getValidSlotIdForDoctor(String doctorId) {
+    final docSlots = _getList('slots').where((s) => s['doctorId']?.toString() == doctorId).toList();
+    // Check if current _selectedSlotId belongs to this doctor and is not CONFIRMED
+    for (final s in docSlots) {
+      if (s['id']?.toString() == _selectedSlotId && s['status'] != 'CONFIRMED') {
+        return _selectedSlotId;
+      }
+    }
+    // Otherwise pick first AVAILABLE or HELD slot for this doctor
+    for (final s in docSlots) {
+      if (s['status'] == 'AVAILABLE' || s['status'] == 'HELD') {
+        return s['id'].toString();
+      }
+    }
+    if (docSlots.isNotEmpty) return docSlots.first['id'].toString();
+    return _selectedSlotId;
+  }
+
   Future<void> _handleHoldSlot(String slotId) async {
     setState(() {
       _selectedSlotId = slotId;
@@ -128,13 +161,15 @@ class _AyuLinkPatientAppState extends State<AyuLinkPatientApp> {
 
   Future<void> _handleInitiateEsewa() async {
     final doc = _selectedDoctor ?? _getList('doctors').first;
+    final slotId = _getValidSlotIdForDoctor(doc['id'].toString());
     setState(() {
+      _selectedSlotId = slotId;
       _busy = true;
       _errorMsg = null;
     });
     try {
       final draft = await _api.initiateEsewaPayment(
-        slotId: _selectedSlotId,
+        slotId: slotId,
         doctorId: doc['id'].toString(),
         forFamilyMemberId: _selectedFamilyId,
       );
@@ -812,6 +847,8 @@ class _AyuLinkPatientAppState extends State<AyuLinkPatientApp> {
             label: Text('${t('bookAppointment')} · NPR ${doc['consultationFee']}'),
             onPressed: () {
               setState(() {
+                _selectedSlotId = _getValidSlotIdForDoctor(doc['id'].toString());
+                _errorMsg = null;
                 _bookingStep = 'select';
                 _subScreen = 'booking';
               });
@@ -829,9 +866,10 @@ class _AyuLinkPatientAppState extends State<AyuLinkPatientApp> {
     final doc = _selectedDoctor ?? _getList('doctors').first;
     final family = _getList('familyMembers');
     final slots = _getList('slots').where((s) => s['doctorId'] == doc['id']).toList();
-    final selectedFam = family.firstWhere(
-      (f) => f['id'] == _selectedFamilyId,
-      orElse: () => {'name': 'Mison Khatiwada', 'relation': 'Myself'},
+    final selectedFam = _findMapById(
+      family,
+      _selectedFamilyId,
+      <String, dynamic>{'id': 'fam-myself', 'name': 'Mison Khatiwada', 'relation': 'Myself'},
     );
 
     return ListView(
@@ -912,10 +950,15 @@ class _AyuLinkPatientAppState extends State<AyuLinkPatientApp> {
             height: 48,
             child: FilledButton(
               onPressed: () {
+                final validSlot = _getValidSlotIdForDoctor(doc['id'].toString());
+                _selectedSlotId = validSlot;
                 if (_holdSecondsRemaining == 0) {
-                  _handleHoldSlot(_selectedSlotId);
+                  _handleHoldSlot(validSlot);
                 }
-                setState(() => _bookingStep = 'summary');
+                setState(() {
+                  _errorMsg = null;
+                  _bookingStep = 'summary';
+                });
               },
               child: const Text('Continue to Appointment Summary'),
             ),
@@ -1423,8 +1466,12 @@ class _AyuLinkPatientAppState extends State<AyuLinkPatientApp> {
               subtitle: Text('Age: ${f['age']} · Blood: ${f['bloodGroup']} · ID: ${f['healthIdCode']}'),
               trailing: TextButton(
                 onPressed: () {
+                  final doc = _selectedDoctor ?? _getList('doctors').first;
                   setState(() {
                     _selectedFamilyId = f['id'].toString();
+                    _selectedSlotId = _getValidSlotIdForDoctor(doc['id'].toString());
+                    _errorMsg = null;
+                    _bookingStep = 'select';
                     _subScreen = 'booking';
                   });
                 },

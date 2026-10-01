@@ -218,6 +218,16 @@ export const PatientMobileApp: React.FC<PatientMobileAppProps> = ({
   const selectedFamilyMember =
     state.familyMembers.find((f) => f.id === selectedFamilyId) || state.familyMembers[0];
 
+  useEffect(() => {
+    const validForDoc = doctorSlots.find((s) => s.id === selectedSlotId && s.status !== 'CONFIRMED');
+    if (!validForDoc) {
+      const firstAvail = doctorSlots.find((s) => s.status === 'AVAILABLE' || s.status === 'HELD');
+      if (firstAvail) {
+        setSelectedSlotId(firstAvail.id);
+      }
+    }
+  }, [currentDoctor.id, state.slots]);
+
   // Handlers
   const handleSelectSlotAndHold = async (slotId: string) => {
     setBookingError(null);

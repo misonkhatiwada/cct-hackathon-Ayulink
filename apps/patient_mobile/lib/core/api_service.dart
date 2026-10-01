@@ -184,6 +184,24 @@ class AyuLinkApiService {
     };
   }
 
+  static Map<String, dynamic> _findMapById(
+    List? list,
+    String? id, [
+    Map<String, dynamic>? fallback,
+  ]) {
+    if (list != null && list.isNotEmpty) {
+      for (final item in list) {
+        if (item is Map && item['id']?.toString() == id) {
+          return Map<String, dynamic>.from(item);
+        }
+      }
+      if (fallback != null) return fallback;
+      final first = list.first;
+      if (first is Map) return Map<String, dynamic>.from(first);
+    }
+    return fallback ?? <String, dynamic>{};
+  }
+
   Future<Map<String, dynamic>> initiateEsewaPayment({
     required String slotId,
     required String doctorId,
@@ -200,19 +218,20 @@ class AyuLinkApiService {
     });
     if (remote != null) return remote;
 
-    // Resilient local eSewa UAT payload generation so user never gets Connection Refused
+    // Resilient local eSewa UAT payload generation (100% type-safe, zero firstWhere covariance issues)
     final docs = (_cachedState['doctors'] as List?) ?? [];
-    final doc = docs.firstWhere(
-      (d) => d['id'] == doctorId,
-      orElse: () => docs.first,
-    ) as Map;
+    final doc = _findMapById(docs, doctorId, <String, dynamic>{
+      'id': doctorId,
+      'name': 'Dr. Suman Sharma',
+      'consultationFee': 800,
+    });
     final fee = (doc['consultationFee'] as num?)?.toInt() ?? 800;
     final txnUuid = 'AL-TXN-20261001-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}';
     final sig = base64Encode(utf8.encode('HMAC-SHA256:total_amount=$fee,transaction_uuid=$txnUuid,product_code=EPAYTEST'));
 
-    return {
+    return <String, dynamic>{
       'paymentId': 'pay-local-$txnUuid',
-      'esewaPayload': {
+      'esewaPayload': <String, dynamic>{
         'amount': fee,
         'taxAmount': 0,
         'totalAmount': fee,
@@ -242,17 +261,22 @@ class AyuLinkApiService {
       return remote;
     }
 
-    // Resilient local verification + state update
+    // Resilient local verification + state update (100% type-safe)
     final docs = (_cachedState['doctors'] as List?) ?? [];
-    final doc = docs.firstWhere(
-      (d) => d['id'] == payload['doctorId'],
-      orElse: () => docs.first,
-    ) as Map;
+    final doc = _findMapById(docs, payload['doctorId']?.toString(), <String, dynamic>{
+      'id': 'doc-suman',
+      'name': 'Dr. Suman Sharma',
+      'hospitalName': 'City Hospital',
+      'departmentName': 'Cardiology',
+      'roomNumber': 'Room 4',
+      'consultationFee': 800,
+    });
     final fams = (_cachedState['familyMembers'] as List?) ?? [];
-    final fam = fams.firstWhere(
-      (f) => f['id'] == payload['forFamilyMemberId'],
-      orElse: () => {'id': 'fam-myself', 'name': 'Mison Khatiwada', 'relation': 'Myself'},
-    ) as Map;
+    final fam = _findMapById(fams, payload['forFamilyMemberId']?.toString(), <String, dynamic>{
+      'id': 'fam-myself',
+      'name': 'Mison Khatiwada',
+      'relation': 'Myself',
+    });
     final slots = (_cachedState['slots'] as List?) ?? [];
     String slotTime = '3:30 PM';
     for (final s in slots) {
@@ -263,9 +287,9 @@ class AyuLinkApiService {
     }
 
     final apts = (_cachedState['appointments'] as List?) ?? [];
-    final tokenNum = 24 + apts.where((a) => a['patientId'] == 'pat-mison').length;
+    final tokenNum = 24 + apts.where((a) => a is Map && a['patientId'] == 'pat-mison').length;
     final tokenCode = 'A-$tokenNum';
-    final newApt = {
+    final newApt = <String, dynamic>{
       'id': 'apt-a$tokenNum',
       'bookingId': 'AL-BK-20261001-00$tokenNum',
       'patientId': 'pat-mison',
@@ -281,7 +305,7 @@ class AyuLinkApiService {
       'displayDate': 'October 1, 2026',
       'date': '2026-10-01',
       'time': slotTime,
-      'arriveBy': '3:15 PM',
+      'arriveBy': '15 mins prior',
       'token': tokenCode,
       'tokenNumber': tokenNum,
       'consultationFee': doc['consultationFee'] ?? 800,
@@ -294,7 +318,7 @@ class AyuLinkApiService {
     _cachedState['appointments'] = apts;
 
     final timeline = (_cachedState['timeline'] as List?) ?? [];
-    timeline.insert(0, {
+    timeline.insert(0, <String, dynamic>{
       'id': 'tl-apt-$tokenNum',
       'patientId': 'pat-mison',
       'dateGroup': 'OCT 1, 2026',
@@ -306,7 +330,7 @@ class AyuLinkApiService {
     _cachedState['timeline'] = timeline;
     _onStateSyncCallback?.call(_cachedState);
 
-    return {
+    return <String, dynamic>{
       'verified': true,
       'appointment': newApt,
     };
@@ -326,7 +350,7 @@ class AyuLinkApiService {
       }
     }
     _onStateSyncCallback?.call(_cachedState);
-    return {'success': true};
+    return <String, dynamic>{'success': true};
   }
 
   Future<Map<String, dynamic>> bookLabTest(String testId) async {
@@ -341,8 +365,11 @@ class AyuLinkApiService {
     }
 
     final catalog = (_cachedState['labCatalog'] as List?) ?? [];
-    final test = catalog.firstWhere((t) => t['id'] == testId, orElse: () => catalog.first) as Map;
-    final newOrder = {
+    final test = _findMapById(catalog, testId, <String, dynamic>{
+      'id': testId,
+      'name': 'Complete Blood Count (CBC)',
+    });
+    final newOrder = <String, dynamic>{
       'id': 'lab-local-${DateTime.now().millisecondsSinceEpoch}',
       'orderCode': 'LAB-20261001-03',
       'patientId': 'pat-mison',
@@ -355,7 +382,7 @@ class AyuLinkApiService {
     final orders = (_cachedState['labOrders'] as List?) ?? [];
     orders.insert(0, newOrder);
     final timeline = (_cachedState['timeline'] as List?) ?? [];
-    timeline.insert(0, {
+    timeline.insert(0, <String, dynamic>{
       'id': 'tl-lab-${DateTime.now().millisecondsSinceEpoch}',
       'patientId': 'pat-mison',
       'dateGroup': 'OCT 1, 2026',
@@ -404,7 +431,7 @@ class AyuLinkApiService {
   }
 
   static Map<String, dynamic> getOfflineFallbackSeed() {
-    return {
+    final rawSeed = <String, dynamic>{
       'patientProfiles': [
         {
           'id': 'pat-mison',
@@ -649,5 +676,6 @@ class AyuLinkApiService {
         },
       ],
     };
+    return Map<String, dynamic>.from(jsonDecode(jsonEncode(rawSeed)) as Map);
   }
 }
