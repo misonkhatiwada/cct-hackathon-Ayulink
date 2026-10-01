@@ -368,10 +368,59 @@ export const PatientMobileApp: React.FC<PatientMobileAppProps> = ({
     (n) => (n.recipientRole === 'patient' || n.recipientRole === 'ALL') && !n.read
   );
 
-  // Check if Mison's token is currently called by Doctor
-  const calledMisonApt = misonAppointments.find(
-    (a) => a.status === 'IN_CONSULTATION' || a.status === 'CALLED'
+  // Live Incoming Call / Hospital Notification Popup on Phone Screen
+  const [liveCallPopup, setLiveCallPopup] = useState<{
+    id: string;
+    title: string;
+    message: string;
+    type: string;
+  } | null>(null);
+  const [lastSeenNotifId, setLastSeenNotifId] = useState<string | null>(() =>
+    state.notifications[0]?.id || null
   );
+
+  const playHospitalChime = () => {
+    try {
+      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const now = ctx.currentTime;
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(587.33, now); // D5
+      osc1.frequency.setValueAtTime(880, now + 0.18); // A5
+      gain1.gain.setValueAtTime(0.18, now);
+      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.start(now);
+      osc1.stop(now + 0.55);
+    } catch {
+      // Ignore audio autoplay restrictions
+    }
+  };
+
+  useEffect(() => {
+    const latest = state.notifications.find(
+      (n) => n.recipientRole === 'patient' || n.recipientRole === 'ALL'
+    );
+    if (latest && latest.id !== lastSeenNotifId) {
+      setLastSeenNotifId(latest.id);
+      setLiveCallPopup({
+        id: latest.id,
+        title: latest.title,
+        message: latest.message,
+        type: latest.type,
+      });
+      playHospitalChime();
+    }
+  }, [state.notifications, lastSeenNotifId]);
+
+  // Check if any appointment is currently called by Doctor
+  const calledMisonApt =
+    misonAppointments.find((a) => a.status === 'IN_CONSULTATION' || a.status === 'CALLED') ||
+    state.appointments.find((a) => a.status === 'IN_CONSULTATION' || a.status === 'CALLED');
 
   const readyLabOrder = state.labOrders.find(
     (l) => l.patientId === 'pat-mison' && l.status === 'Report Ready'
@@ -463,6 +512,29 @@ export const PatientMobileApp: React.FC<PatientMobileAppProps> = ({
           </button>
         </div>
       </header>
+
+      {/* LIVE INCOMING HOSPITAL CALL / NOTIFICATION POPUP ALERT */}
+      {liveCallPopup && (
+        <div className="bg-amber-500 text-slate-950 px-4 py-3 border-b-2 border-amber-600 shadow-lg shrink-0 animate-pulse">
+          <div className="flex items-start justify-between gap-2">
+            <div className="space-y-0.5">
+              <div className="text-xs font-extrabold tracking-tight flex items-center gap-1.5">
+                <Bell className="w-4 h-4 fill-slate-950 shrink-0" />
+                <span>{liveCallPopup.title}</span>
+              </div>
+              <p className="text-[11px] font-semibold leading-snug text-slate-900">
+                {liveCallPopup.message}
+              </p>
+            </div>
+            <button
+              onClick={() => setLiveCallPopup(null)}
+              className="px-2.5 py-1 rounded-lg bg-slate-950 text-white text-[10px] font-bold shrink-0"
+            >
+              OK ✓
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* REAL-TIME SOCKET.IO "YOUR TURN" BANNER (Step 13 of Demo Flow) */}
       {calledMisonApt && (

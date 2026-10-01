@@ -647,22 +647,16 @@ async function startServer() {
     const { doctorId = 'doc-suman', targetAppointmentId } = req.body;
     const state = dbStore.getState();
 
-    // Complete any currently IN_CONSULTATION appointment for this doctor
-    for (const a of state.appointments) {
-      if (a.doctorId === doctorId && (a.status === 'IN_CONSULTATION' || a.status === 'CALLED')) {
-        a.status = 'COMPLETED';
-        a.completedAt = new Date().toISOString();
-      }
-    }
-
-    // Find target appointment or prioritize Mison's A-24 if waiting/checked-in/confirmed, else next token
+    // Find target appointment first so we know which doctor's queue is being called
     let nextApt: Appointment | undefined;
     if (targetAppointmentId) {
       nextApt = state.appointments.find((a) => a.id === targetAppointmentId);
     } else {
-      // If Mison's booking (e.g. A-24) is WAITING or CHECKED_IN, call it so the demo flow works in 1 click, or call next waiting
       const misonWaiting = state.appointments.find(
-        (a) => a.doctorId === doctorId && a.patientId === 'pat-mison' && (a.status === 'WAITING' || a.status === 'CHECKED_IN' || a.status === 'CONFIRMED')
+        (a) =>
+          a.doctorId === doctorId &&
+          a.patientId === 'pat-mison' &&
+          (a.status === 'WAITING' || a.status === 'CHECKED_IN' || a.status === 'CONFIRMED')
       );
       if (misonWaiting) {
         nextApt = misonWaiting;
@@ -678,13 +672,24 @@ async function startServer() {
       return;
     }
 
+    const activeDocId = nextApt.doctorId || doctorId;
+
+    // Complete any other currently IN_CONSULTATION appointment for this doctor
+    for (const a of state.appointments) {
+      if (a.id !== nextApt.id && a.doctorId === activeDocId && (a.status === 'IN_CONSULTATION' || a.status === 'CALLED')) {
+        a.status = 'COMPLETED';
+        a.completedAt = new Date().toISOString();
+      }
+    }
+
     nextApt.status = 'IN_CONSULTATION';
     nextApt.calledAt = new Date().toISOString();
 
-    const queue = state.queues.find((q) => q.doctorId === doctorId) || state.queues[0];
+    const queue = state.queues.find((q) => q.doctorId === activeDocId) || state.queues[0];
     if (queue) {
       queue.currentToken = nextApt.token;
       queue.currentTokenNumber = nextApt.tokenNumber;
+      queue.roomNumber = nextApt.roomNumber.replace('Room ', '');
       queue.updatedAt = new Date().toISOString();
     }
 
@@ -693,7 +698,7 @@ async function startServer() {
       recipientUserId: 'usr-patient-mison',
       type: 'Your Turn',
       title: `🔔 YOUR TURN · Token ${nextApt.token}`,
-      message: `Please proceed now to ${nextApt.roomNumber} (${nextApt.doctorName}).`,
+      message: `${nextApt.patientName}, please proceed now to ${nextApt.roomNumber} (${nextApt.doctorName} · ${nextApt.departmentName}).`,
       referenceId: nextApt.id,
     });
 
@@ -702,6 +707,7 @@ async function startServer() {
     broadcastStateUpdate('queue:called', {
       appointment: nextApt,
       queue,
+      notification: notif,
     });
     io.emit('queue:updated', {
       queue,
@@ -713,7 +719,37 @@ async function startServer() {
       success: true,
       calledAppointment: nextApt,
       queue,
+      notification: notif,
     });
+  });
+
+  // Custom Call/Notify Patient endpoint for Reception, Doctor Room, Lab Check, or Pharmacy
+  app.post('/api/queue/notify-patient', (req: Request, res: Response) => {
+    const {
+      patientName = 'Mison Khatiwada',
+      token = 'A-24',
+      department = 'Consultation Room 4',
+      title,
+      message,
+      referenceId,
+    } = req.body;
+
+    const notif = dbStore.addNotification({
+      recipientRole: 'patient',
+      recipientUserId: 'usr-patient-mison',
+      type: 'Your Turn',
+      title: title || `🔔 HOSPITAL CALL · Token ${token}`,
+      message:
+        message ||
+        `${patientName} (Token ${token}), please proceed to ${department} now.`,
+      referenceId: referenceId || 'apt-a24',
+    });
+
+    dbStore.saveToDisk();
+    broadcastStateUpdate('patient:called-notification', notif);
+    io.emit('notification:new', notif);
+
+    res.json({ success: true, notification: notif });
   });
 
   app.patch('/api/appointments/:id/status', (req: Request, res: Response) => {
@@ -958,9 +994,19 @@ async function startServer() {
       timestamp: Date.now() + 3,
     });
 
+    const labNotif = dbStore.addNotification({
+      recipientRole: 'patient',
+      recipientUserId: 'usr-patient-mison',
+      type: 'Your Turn',
+      title: `🔬 LAB CHECK REQUESTED · ${newOrder.testName}`,
+      message: `${doctor?.name || 'Doctor'} requested ${newOrder.testName} (${newOrder.orderCode}). Please proceed to Pathology Lab (Ground Floor) for sample collection.`,
+      referenceId: newOrder.id,
+    });
+
     dbStore.saveToDisk();
 
     broadcastStateUpdate('lab:order-created', newOrder);
+    io.emit('notification:new', labNotif);
 
     res.json(newOrder);
   });
@@ -1032,6 +1078,15 @@ async function startServer() {
       io.emit('notification:new', notif);
       broadcastStateUpdate('lab:report-ready', order);
     } else {
+      const sampleNotif = dbStore.addNotification({
+        recipientRole: 'patient',
+        recipientUserId: 'usr-patient-mison',
+        type: 'Queue Updated',
+        title: `🔬 LAB UPDATE · ${order.testName} (${status})`,
+        message: `Pathology Lab updated your ${order.testName} status to "${status}".`,
+        referenceId: order.id,
+      });
+      io.emit('notification:new', sampleNotif);
       broadcastStateUpdate('lab:order-updated', order);
     }
 
@@ -1055,6 +1110,21 @@ async function startServer() {
     order.status = status;
     order.updatedAt = new Date().toISOString();
 
+    const pharmNotif = dbStore.addNotification({
+      recipientRole: 'patient',
+      recipientUserId: 'usr-patient-mison',
+      type: 'Prescription Available',
+      title:
+        status === 'Ready'
+          ? `💊 PHARMACY CALL · Medicines Ready (${order.rxCode})`
+          : `💊 PHARMACY · ${order.rxCode} is ${status}`,
+      message:
+        status === 'Ready'
+          ? `${order.patientName}, please proceed to City Hospital Pharmacy Counter now to collect your medicines (${order.rxCode}).`
+          : `Your prescription ${order.rxCode} status at City Hospital Pharmacy is now: ${status}.`,
+      referenceId: order.id,
+    });
+
     dbStore.addAuditLog({
       actorId: 'usr-pharmacy',
       actorName: 'Kabita Poudel',
@@ -1069,6 +1139,7 @@ async function startServer() {
 
     dbStore.saveToDisk();
     broadcastStateUpdate('pharmacy:updated', order);
+    io.emit('notification:new', pharmNotif);
     res.json(order);
   });
 

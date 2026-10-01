@@ -15,6 +15,7 @@ import {
   Clock,
   FileText,
   Sparkles,
+  Bell,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -150,14 +151,37 @@ export const HospitalWebDashboard: React.FC<HospitalWebDashboardProps> = ({
 
   const handleCallPatientToDoctor = async (apt: Appointment) => {
     try {
-      await ayuApi.callNextPatient('doc-suman', apt.id);
+      await ayuApi.callNextPatient(apt.doctorId || 'doc-suman', apt.id);
       setSelectedAptId(apt.id);
       onRoleChange('doctor');
       setActiveStep('doctor_consultation');
       setFlowBanner(
-        `🔔 Called Token ${apt.token} (${apt.patientName}) to Room 4. Doctor Consultation started!`
+        `🔔 Called Token ${apt.token} (${apt.patientName}) to ${apt.roomNumber} (${apt.doctorName}). Notification sent to Mobile App!`
       );
-      onActionFeedback?.(`Called ${apt.token} to Doctor Consultation Room 4`);
+      onActionFeedback?.(`🔔 Notification sent to ${apt.patientName} (Token ${apt.token} -> ${apt.roomNumber})`);
+    } catch (err: any) {
+      onActionFeedback?.(err.message);
+    }
+  };
+
+  const handleRingPatient = async (departmentLabel: string, customTitle?: string, customMessage?: string) => {
+    try {
+      const token = currentApt?.token || 'A-24';
+      const patName = currentApt?.patientName || 'Mison Khatiwada';
+      await ayuApi.notifyPatient({
+        patientName: patName,
+        token,
+        department: departmentLabel,
+        title: customTitle || `🔔 YOUR TURN · Token ${token}`,
+        message:
+          customMessage ||
+          `${patName} (Token ${token}), please proceed to ${departmentLabel} now.`,
+        referenceId: currentApt?.id || 'apt-a24',
+      });
+      setFlowBanner(
+        `🔔 Live Call Notification sent to ${patName}'s Mobile App: "Proceed to ${departmentLabel}"!`
+      );
+      onActionFeedback?.(`🔔 Notification sent to ${patName} (${departmentLabel})`);
     } catch (err: any) {
       onActionFeedback?.(err.message);
     }
@@ -343,8 +367,8 @@ export const HospitalWebDashboard: React.FC<HospitalWebDashboardProps> = ({
             </div>
           </div>
 
-          {/* Active Patient Selector */}
-          <div className="flex items-center gap-2 text-xs">
+          {/* Active Patient Selector & Instant Call Button */}
+          <div className="flex flex-wrap items-center gap-2 text-xs">
             <span className="text-slate-500 font-medium">Active Patient:</span>
             <select
               value={currentApt?.id || ''}
@@ -361,6 +385,17 @@ export const HospitalWebDashboard: React.FC<HospitalWebDashboardProps> = ({
                 </option>
               ))}
             </select>
+            <button
+              onClick={() =>
+                handleRingPatient(
+                  `${currentApt?.roomNumber || 'Room 4'} (${currentApt?.doctorName || 'Dr. Suman Sharma'})`
+                )
+              }
+              className="h-9 px-3.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold inline-flex items-center gap-1.5 shadow-xs transition-colors"
+            >
+              <Bell className="w-3.5 h-3.5" />
+              <span>🔔 Call / Notify Patient</span>
+            </button>
           </div>
         </div>
 
@@ -599,8 +634,19 @@ export const HospitalWebDashboard: React.FC<HospitalWebDashboardProps> = ({
                 </p>
               </div>
 
-              {/* Latest Lab Report Status Pill inside Doctor View */}
-              <div className="flex items-center gap-2">
+              {/* Latest Lab Report Status Pill & Ring Patient Button inside Doctor View */}
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() =>
+                    handleRingPatient(
+                      `${currentApt?.roomNumber || 'Room 4'} (${currentApt?.doctorName || 'Dr. Suman Sharma'})`
+                    )
+                  }
+                  className="px-3.5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold inline-flex items-center gap-1.5"
+                >
+                  <Bell className="w-3.5 h-3.5" />
+                  <span>🔔 Ring Patient to Room</span>
+                </button>
                 {patientLabOrders.length > 0 && (
                   <div
                     className={`px-3.5 py-2 rounded-xl border text-xs ${
@@ -865,6 +911,20 @@ export const HospitalWebDashboard: React.FC<HospitalWebDashboardProps> = ({
 
                   <div className="flex flex-wrap items-center gap-2">
                     <button
+                      onClick={() =>
+                        handleRingPatient(
+                          'Pathology Lab Room 1 (Sample Collection)',
+                          `🔬 LAB CALL · ${ord.testName}`,
+                          `${ord.patientName}, please come to Pathology Lab Room 1 for your ${ord.testName} sample collection.`
+                        )
+                      }
+                      className="px-3 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold inline-flex items-center gap-1.5"
+                    >
+                      <Bell className="w-3.5 h-3.5" />
+                      <span>🔔 Call to Lab</span>
+                    </button>
+
+                    <button
                       onClick={() => handleLabUpdateStatus(ord.id, 'Sample Collected', false)}
                       className={`px-3 py-2 rounded-xl border font-semibold ${
                         ord.status === 'Sample Collected'
@@ -963,8 +1023,21 @@ export const HospitalWebDashboard: React.FC<HospitalWebDashboardProps> = ({
                     ))}
                   </div>
 
-                  {/* Simple 3-Click Pharmacy Workflow */}
+                  {/* Simple Pharmacy Workflow + Call Button */}
                   <div className="pt-2 flex flex-wrap items-center justify-end gap-2">
+                    <button
+                      onClick={() =>
+                        handleRingPatient(
+                          'City Hospital Pharmacy Counter 2',
+                          `💊 PHARMACY CALL · ${ord.rxCode}`,
+                          `${ord.patientName}, please come to City Hospital Pharmacy Counter 2 to collect your medicines (${ord.rxCode}).`
+                        )
+                      }
+                      className="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold inline-flex items-center gap-1.5"
+                    >
+                      <Bell className="w-3.5 h-3.5" />
+                      <span>🔔 Call Patient to Counter</span>
+                    </button>
                     <button
                       onClick={() => handlePharmacyStatus(ord.id, 'Preparing')}
                       className={`px-3.5 py-2 rounded-xl border font-semibold ${

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -7,13 +8,15 @@ import 'package:socket_io_client/socket_io_client.dart' as io;
 /// Features:
 /// 1. Multi-endpoint auto-discovery (localhost:3000, 10.0.2.2:3000, Cloud URL, or Custom LAN IP)
 /// 2. Persists custom Laptop Wi-Fi IP in SharedPreferences
-/// 3. Resilient fallback execution so the app NEVER crashes with SocketException: Connection refused
+/// 3. Real-time Socket.IO + 2.5s background polling so Hospital Call Notifications NEVER miss
 class AyuLinkApiService {
   String baseUrl;
   bool isConnectedToServer = false;
   io.Socket? socket;
+  Timer? _pollTimer;
   Map<String, dynamic> _cachedState = getOfflineFallbackSeed();
   void Function(Map<String, dynamic>)? _onStateSyncCallback;
+  void Function(Map<String, dynamic>)? _onNotificationCallback;
 
   static const List<String> _candidateUrls = [
     'http://localhost:3000',
@@ -24,8 +27,12 @@ class AyuLinkApiService {
 
   AyuLinkApiService({this.baseUrl = 'http://localhost:3000'});
 
-  Future<void> initAndDiscover(void Function(Map<String, dynamic>) onStateSync) async {
+  Future<void> initAndDiscover(
+    void Function(Map<String, dynamic>) onStateSync, {
+    void Function(Map<String, dynamic>)? onNotification,
+  }) async {
     _onStateSyncCallback = onStateSync;
+    _onNotificationCallback = onNotification;
     try {
       final prefs = await SharedPreferences.getInstance();
       final savedUrl = prefs.getString('ayulink_server_url');
@@ -35,7 +42,32 @@ class AyuLinkApiService {
     } catch (_) {}
 
     await discoverWorkingServer();
-    connectSocket(onStateSync);
+    connectSocket(onStateSync, onNotification: onNotification);
+    _startBackgroundPoll();
+  }
+
+  void _startBackgroundPoll() {
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(const Duration(milliseconds: 2500), (_) async {
+      try {
+        final res = await http
+            .get(Uri.parse('$baseUrl/api/state'))
+            .timeout(const Duration(milliseconds: 1800));
+        if (res.statusCode == 200) {
+          final decoded = jsonDecode(res.body);
+          if (decoded is Map && decoded.containsKey('doctors')) {
+            isConnectedToServer = true;
+            _cachedState = Map<String, dynamic>.from(decoded);
+            _onStateSyncCallback?.call(_cachedState);
+          }
+        }
+      } catch (_) {}
+    });
+  }
+
+  void dispose() {
+    _pollTimer?.cancel();
+    socket?.disconnect();
   }
 
   Future<bool> discoverWorkingServer() async {
@@ -78,8 +110,12 @@ class AyuLinkApiService {
     connectSocket(onStateSync);
   }
 
-  void connectSocket(void Function(Map<String, dynamic>) onStateSync) {
+  void connectSocket(
+    void Function(Map<String, dynamic>) onStateSync, {
+    void Function(Map<String, dynamic>)? onNotification,
+  }) {
     _onStateSyncCallback = onStateSync;
+    if (onNotification != null) _onNotificationCallback = onNotification;
     try {
       socket?.disconnect();
       socket = io.io(
@@ -99,6 +135,31 @@ class AyuLinkApiService {
           isConnectedToServer = true;
           _cachedState = Map<String, dynamic>.from(data);
           onStateSync(_cachedState);
+        }
+      });
+
+      socket!.on('notification:new', (data) {
+        if (data is Map) {
+          _onNotificationCallback?.call(Map<String, dynamic>.from(data));
+        }
+      });
+
+      socket!.on('patient:called-notification', (data) {
+        if (data is Map) {
+          _onNotificationCallback?.call(Map<String, dynamic>.from(data));
+        }
+      });
+
+      socket!.on('queue:called', (data) {
+        if (data is Map && data['notification'] is Map) {
+          _onNotificationCallback?.call(Map<String, dynamic>.from(data['notification'] as Map));
+        } else if (data is Map && data['appointment'] is Map) {
+          final apt = Map<String, dynamic>.from(data['appointment'] as Map);
+          _onNotificationCallback?.call(<String, dynamic>{
+            'id': 'call-${DateTime.now().millisecondsSinceEpoch}',
+            'title': '🔔 YOUR TURN · Token ${apt['token']}',
+            'message': '${apt['patientName']}, please proceed now to ${apt['roomNumber']} (${apt['doctorName']}).',
+          });
         }
       });
     } catch (_) {}

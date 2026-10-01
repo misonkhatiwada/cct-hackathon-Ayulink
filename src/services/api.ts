@@ -88,6 +88,22 @@ class AyuClientApiService {
       }
     });
 
+    this.socket.on('patient:called-notification', (data: { title: string; message: string }) => {
+      if (handlers.onEventToast && data) {
+        handlers.onEventToast(data.title, data.message, 'CALLED');
+      }
+    });
+
+    this.socket.on('pharmacy:updated', (data: { rxCode: string; patientName: string; status: string }) => {
+      if (handlers.onEventToast && data) {
+        handlers.onEventToast(
+          `💊 PHARMACY · ${data.rxCode} (${data.status})`,
+          `${data.patientName} — Prescription ${data.rxCode} is now ${data.status}.`,
+          data.status.toUpperCase()
+        );
+      }
+    });
+
     return this.socket;
   }
 
@@ -182,6 +198,22 @@ class AyuClientApiService {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'No waiting patient to call');
     return data;
+  }
+
+  public async notifyPatient(params: {
+    patientName?: string;
+    token?: string;
+    department?: string;
+    title?: string;
+    message?: string;
+    referenceId?: string;
+  }) {
+    const res = await fetch('/api/queue/notify-patient', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    return res.json();
   }
 
   public async updateAppointmentStatus(id: string, status: string, time?: string) {

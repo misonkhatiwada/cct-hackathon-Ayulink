@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'core/api_service.dart';
 import 'l10n/app_localizations.dart';
 
@@ -32,6 +33,11 @@ class _AyuLinkPatientAppState extends State<AyuLinkPatientApp> {
   Map<String, dynamic>? _selectedDoctor;
   Map<String, dynamic>? _selectedAppointment;
 
+  // Live Hospital Call Notification Popup State
+  Map<String, dynamic>? _liveCallBanner;
+  String? _lastSeenNotifId;
+  bool _initialNotifSeeded = false;
+
   // Booking Flow State
   String _selectedFamilyId = 'fam-myself';
   String _selectedSlotId = 'slot-suman-330';
@@ -57,16 +63,63 @@ class _AyuLinkPatientAppState extends State<AyuLinkPatientApp> {
     super.initState();
     _state = AyuLinkApiService.getOfflineFallbackSeed();
     _selectedDoctor = (_state['doctors'] as List).first as Map<String, dynamic>;
-    _api.initAndDiscover((updatedState) {
-      if (mounted) {
+    _api.initAndDiscover(
+      (updatedState) {
+        if (!mounted) return;
+        _checkAndTriggerNotificationAlert(updatedState);
         setState(() => _state = updatedState);
+      },
+      onNotification: (notif) {
+        if (!mounted) return;
+        _triggerPhoneCallAlert(notif);
+      },
+    );
+  }
+
+  void _checkAndTriggerNotificationAlert(Map<String, dynamic> updatedState) {
+    final rawNotifs = updatedState['notifications'];
+    if (rawNotifs is List && rawNotifs.isNotEmpty) {
+      for (final item in rawNotifs) {
+        if (item is Map) {
+          final role = item['recipientRole']?.toString() ?? 'patient';
+          if (role == 'patient' || role == 'ALL') {
+            final id = item['id']?.toString();
+            if (!_initialNotifSeeded) {
+              _initialNotifSeeded = true;
+              _lastSeenNotifId = id;
+              return;
+            }
+            if (id != null && id != _lastSeenNotifId) {
+              _lastSeenNotifId = id;
+              _triggerPhoneCallAlert(Map<String, dynamic>.from(item));
+            }
+            return;
+          }
+        }
       }
-    });
+    } else if (!_initialNotifSeeded) {
+      _initialNotifSeeded = true;
+    }
+  }
+
+  void _triggerPhoneCallAlert(Map<String, dynamic> notif) {
+    final id = notif['id']?.toString();
+    if (id != null) _lastSeenNotifId = id;
+    try {
+      HapticFeedback.heavyImpact();
+      SystemSound.play(SystemSoundType.alert);
+    } catch (_) {}
+    if (mounted) {
+      setState(() {
+        _liveCallBanner = notif;
+      });
+    }
   }
 
   @override
   void dispose() {
     _holdTimer?.cancel();
+    _api.dispose();
     _aiController.dispose();
     super.dispose();
   }
@@ -376,6 +429,53 @@ class _AyuLinkPatientAppState extends State<AyuLinkPatientApp> {
           ),
           body: Column(
             children: [
+              if (_liveCallBanner != null)
+                Container(
+                  width: double.infinity,
+                  color: Colors.amber.shade500,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.notifications_active, color: Colors.black, size: 22),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _liveCallBanner!['title']?.toString() ?? '🔔 HOSPITAL CALL',
+                              style: const TextStyle(
+                                color: Colors.black,
+                                fontWeight: FontWeight.w900,
+                                fontSize: 13,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              _liveCallBanner!['message']?.toString() ?? 'Please proceed to your room now.',
+                              style: const TextStyle(
+                                color: Colors.black87,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      FilledButton(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Colors.black,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        ),
+                        onPressed: () => setState(() => _liveCallBanner = null),
+                        child: const Text('OK ✓', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                ),
               if (calledApt != null)
                 MaterialBanner(
                   backgroundColor: Colors.teal.shade700,
