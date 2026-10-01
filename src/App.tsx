@@ -35,6 +35,7 @@ export function App() {
   const [darkMode, setDarkMode] = useState(false);
   const [activeDashboardRole, setActiveDashboardRole] = useState<UserRole>('hospital_admin');
   const [showArchModal, setShowArchModal] = useState(false);
+  const [lanUrl, setLanUrl] = useState<string>('');
 
   // Real-time Socket.IO Toast Banner
   const [toast, setToast] = useState<{ title: string; description: string; badge?: string } | null>(null);
@@ -50,6 +51,15 @@ export function App() {
   }, [toast]);
 
   useEffect(() => {
+    fetch('/api/network-info')
+      .then((r) => r.json())
+      .then((info) => {
+        if (info?.lanUrls?.length > 0) {
+          setLanUrl(info.lanUrls[0]);
+        }
+      })
+      .catch(() => {});
+
     ayuApi
       .getState()
       .then((initial) => setState(initial))
@@ -193,16 +203,22 @@ export function App() {
           darkMode ? 'bg-slate-900/40 border-slate-800/80' : 'bg-slate-100/70 border-slate-200/70'
         }`}
       >
-        <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
+        <div className="flex flex-wrap items-center gap-2 text-slate-600 dark:text-slate-300">
           <span className="font-semibold text-teal-700 dark:text-teal-400">
             One Health ID. Every Care Connected.
           </span>
           <span>·</span>
-          <span>Nepal Digital Health Operating System</span>
-          <span>·</span>
           <span className="font-mono text-[11px] text-emerald-600 dark:text-emerald-400">
             ● Socket.IO Connected
           </span>
+          {lanUrl && (
+            <>
+              <span>·</span>
+              <span className="font-mono text-[11px] text-slate-500">
+                Phone URL: <strong className="text-slate-800 dark:text-slate-200">{lanUrl}</strong>
+              </span>
+            </>
+          )}
         </div>
 
         {/* Quick Role Switcher Pills for Judges */}

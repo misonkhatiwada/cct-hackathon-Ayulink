@@ -1,6 +1,7 @@
 import express, { Request, Response, NextFunction } from 'express';
 import http from 'http';
 import path from 'path';
+import os from 'os';
 import crypto from 'crypto';
 import { Server as SocketIOServer } from 'socket.io';
 import { createServer as createViteServer } from 'vite';
@@ -96,8 +97,31 @@ async function startServer() {
   }
 
   // ============================================================================
-  // 1. STATE & DEMO RESET API
+  // 1. STATE, NETWORK INFO & DEMO RESET API
   // ============================================================================
+  function getLocalLanIps(): string[] {
+    const nets = os.networkInterfaces();
+    const results: string[] = [];
+    for (const name of Object.keys(nets)) {
+      for (const net of nets[name] || []) {
+        if (net.family === 'IPv4' && !net.internal) {
+          results.push(net.address);
+        }
+      }
+    }
+    return results;
+  }
+
+  app.get('/api/network-info', (_req: Request, res: Response) => {
+    const ips = getLocalLanIps();
+    res.json({
+      port: PORT,
+      lanIps: ips,
+      lanUrls: ips.map((ip) => `http://${ip}:${PORT}`),
+      adbCommand: `adb reverse tcp:${PORT} tcp:${PORT}`,
+    });
+  });
+
   app.get('/api/state', (_req: Request, res: Response) => {
     res.json(dbStore.getState());
   });
@@ -1191,12 +1215,15 @@ async function startServer() {
   }
 
   httpServer.listen(PORT, '0.0.0.0', () => {
+    const lanIps = getLocalLanIps();
     console.log(`\n================================================================`);
     console.log(`🚀 AYULINK HEALTHCARE OS BACKEND + DASHBOARD RUNNING!`);
-    console.log(`👉 Open in Browser:       http://localhost:${PORT}`);
-    console.log(`👉 Full Web Dashboard:    http://localhost:${PORT}/dashboard`);
-    console.log(`👉 REST + Socket.IO API:  http://localhost:${PORT}/api/state`);
-    console.log(`   (Note: Do NOT open 0.0.0.0 in browser — use localhost:${PORT})`);
+    console.log(`👉 Open in Browser:         http://localhost:${PORT}`);
+    console.log(`👉 Full Web Dashboard:      http://localhost:${PORT}/dashboard`);
+    if (lanIps.length > 0) {
+      console.log(`📱 Physical Phone Wi-Fi URL: http://${lanIps[0]}:${PORT}`);
+    }
+    console.log(`🔌 USB Phone (Run in term):  adb reverse tcp:${PORT} tcp:${PORT}`);
     console.log(`================================================================\n`);
   });
 }

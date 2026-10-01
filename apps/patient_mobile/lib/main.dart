@@ -57,8 +57,7 @@ class _AyuLinkPatientAppState extends State<AyuLinkPatientApp> {
     super.initState();
     _state = AyuLinkApiService.getOfflineFallbackSeed();
     _selectedDoctor = (_state['doctors'] as List).first as Map<String, dynamic>;
-    _syncFromBackend();
-    _api.connectSocket((updatedState) {
+    _api.initAndDiscover((updatedState) {
       if (mounted) {
         setState(() => _state = updatedState);
       }
@@ -195,24 +194,49 @@ class _AyuLinkPatientAppState extends State<AyuLinkPatientApp> {
     showDialog(
       context: ctx,
       builder: (dCtx) => AlertDialog(
-        title: const Text('Backend Server URL', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              '• Web / iOS / Desktop: http://localhost:3000\n• Android Emulator: http://10.0.2.2:3000\n• Real Phone on Wi-Fi: http://<YOUR-PC-IP>:3000',
-              style: TextStyle(fontSize: 12),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: ctrl,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                labelText: 'Node.js Server URL',
+        title: const Text('Connect Phone to Backend', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Choose how your phone is connected:\n'
+                '1. USB Cable: Run "adb reverse tcp:3000 tcp:3000" on PC & use http://localhost:3000\n'
+                '2. Same Wi-Fi: Enter your PC IP (shown in PC terminal, e.g. http://192.168.1.x:3000)\n'
+                '3. Cloud Server: Tap "Use Cloud Server" below',
+                style: TextStyle(fontSize: 12),
               ),
-            ),
-          ],
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  ActionChip(
+                    label: const Text('USB (localhost:3000)', style: TextStyle(fontSize: 11)),
+                    onPressed: () => ctrl.text = 'http://localhost:3000',
+                  ),
+                  ActionChip(
+                    label: const Text('Emulator (10.0.2.2)', style: TextStyle(fontSize: 11)),
+                    onPressed: () => ctrl.text = 'http://10.0.2.2:3000',
+                  ),
+                  ActionChip(
+                    label: const Text('Cloud Server', style: TextStyle(fontSize: 11)),
+                    onPressed: () =>
+                        ctrl.text = 'https://ais-pre-t2jxcjbas4ql24zoamgpra-794037624500.asia-southeast1.run.app',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: ctrl,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  labelText: 'Backend URL (e.g. http://192.168.1.10:3000)',
+                ),
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dCtx), child: const Text('Cancel')),
@@ -221,10 +245,9 @@ class _AyuLinkPatientAppState extends State<AyuLinkPatientApp> {
               _api.setBaseUrl(ctrl.text, (updated) {
                 if (mounted) setState(() => _state = updated);
               });
-              _syncFromBackend();
               Navigator.pop(dCtx);
             },
-            child: const Text('Connect & Sync'),
+            child: const Text('Save & Connect'),
           ),
         ],
       ),
@@ -249,11 +272,21 @@ class _AyuLinkPatientAppState extends State<AyuLinkPatientApp> {
         useMaterial3: true,
         colorSchemeSeed: const Color(0xFF0D9488),
         brightness: Brightness.light,
+        navigationBarTheme: NavigationBarThemeData(
+          labelTextStyle: WidgetStateProperty.all(
+            const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, overflow: TextOverflow.ellipsis),
+          ),
+        ),
       ),
       darkTheme: ThemeData(
         useMaterial3: true,
         colorSchemeSeed: const Color(0xFF0D9488),
         brightness: Brightness.dark,
+        navigationBarTheme: NavigationBarThemeData(
+          labelTextStyle: WidgetStateProperty.all(
+            const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, overflow: TextOverflow.ellipsis),
+          ),
+        ),
       ),
       home: Builder(
         builder: (ctx) => Scaffold(
