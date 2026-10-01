@@ -1,0 +1,6 @@
+{
+  "name": "AyuLink — Connected Healthcare Operating System",
+  "description": "One Health ID. Every Care Connected. Full-stack healthcare operating system connecting patients, doctors, hospitals, receptionists, laboratories, pharmacies, and administrators in real time across Nepal.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

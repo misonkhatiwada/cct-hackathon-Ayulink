@@ -1,0 +1,85 @@
+// AyuLink Patient Mobile App — Localization Strings (English, नेपाली, Roman Nepali)
+// No UI strings are hard-coded inside presentation widgets.
+
+enum AyuLocale { en, ne, romanNe }
+
+class AppStrings {
+  static const Map<AyuLocale, Map<String, String>> _translations = {
+    AyuLocale.en: {
+      'greeting': 'Namaste, Mison 👋',
+      'howCanWeHelp': 'How can we help you?',
+      'findDoctor': 'Find Doctor',
+      'findHospital': 'Find Hospital',
+      'bookLabTest': 'Book Lab Test',
+      'pharmacy': 'Pharmacy',
+      'telemedicine': 'Telemedicine',
+      'emergency': 'Emergency',
+      'upcomingAppointment': 'UPCOMING APPOINTMENT',
+      'viewAppointment': 'View Appointment',
+      'navHome': 'Home',
+      'navDoctors': 'Doctors',
+      'navAppointments': 'Appointments',
+      'navHealth': 'Health',
+      'navProfile': 'Profile',
+      'bookAppointment': 'Book Appointment',
+      'slotHeld': 'SLOT HELD',
+      'expiresIn': 'Expires in:',
+      'payEsewa': 'Pay with eSewa UAT',
+      'yourQueue': 'YOUR QUEUE',
+      'yourTurn': '🔔 YOUR TURN',
+      'proceedNow': 'Please proceed now.',
+    },
+    AyuLocale.ne: {
+      'greeting': 'नमस्ते, मिसन 👋',
+      'howCanWeHelp': 'आज हामी तपाईंलाई कसरी मद्दत गर्न सक्छौं?',
+      'findDoctor': 'डाक्टर खोज्नुहोस्',
+      'findHospital': 'अस्पताल खोज्नुहोस्',
+      'bookLabTest': 'ल्याब टेस्ट बुक',
+      'pharmacy': 'फार्मेसी',
+      'telemedicine': 'टेलिमेडिसिन',
+      'emergency': 'आकस्मिक सेवा',
+      'upcomingAppointment': 'आगामी अपोइन्टमेन्ट',
+      'viewAppointment': 'विवरण हेर्नुहोस्',
+      'navHome': 'गृहपृष्ठ',
+      'navDoctors': 'डाक्टरहरू',
+      'navAppointments': 'अपोइन्टमेन्ट',
+      'navHealth': 'स्वास्थ्य रेखा',
+      'navProfile': 'प्रोफाइल',
+      'bookAppointment': 'अपोइन्टमेन्ट बुक गर्नुहोस्',
+      'slotHeld': 'स्लट होल्ड गरिएको छ',
+      'expiresIn': 'बाँकी समय:',
+      'payEsewa': 'eSewa UAT बाट भुक्तानी गर्नुहोस्',
+      'yourQueue': 'तपाईंको पालो (LIVE QUEUE)',
+      'yourTurn': '🔔 तपाईंको पालो आयो',
+      'proceedNow': 'कृपया अहिले नै भित्र जानुहोस्।',
+    },
+    AyuLocale.romanNe: {
+      'greeting': 'Namaste, Mison 👋',
+      'howCanWeHelp': 'Aaja hami tapai lai kasari maddat garna sakchau?',
+      'findDoctor': 'Doctor Khojnuhos',
+      'findHospital': 'Hospital Khojnuhos',
+      'bookLabTest': 'Lab Test Book',
+      'pharmacy': 'Pharmacy',
+      'telemedicine': 'Telemedicine',
+      'emergency': 'Emergency 24/7',
+      'upcomingAppointment': 'UPCOMING APPOINTMENT',
+      'viewAppointment': 'Appointment Hernuhos',
+      'navHome': 'Home',
+      'navDoctors': 'Doctors',
+      'navAppointments': 'Appointments',
+      'navHealth': 'Health Timeline',
+      'navProfile': 'Profile',
+      'bookAppointment': 'Book Appointment',
+      'slotHeld': 'SLOT HOLD BHAYEKO CHA',
+      'expiresIn': 'Expire hune samaya:',
+      'payEsewa': 'eSewa UAT Bata Tirnuhos',
+      'yourQueue': 'TAPAI KO QUEUE',
+      'yourTurn': '🔔 TAPAI KO PALO AAYO',
+      'proceedNow': 'Kripaya Room 4 ma januhos.',
+    },
+  };
+
+  static String tr(AyuLocale locale, String key) {
+    return _translations[locale]?[key] ?? _translations[AyuLocale.en]![key] ?? key;
+  }
+}
