@@ -60,11 +60,18 @@ async function startServer() {
 
   app.use(express.json({ limit: '2mb' }));
 
-  // Security headers (Helmet-equivalent)
+  // Full CORS + Security headers so Flutter Android/iOS/Web and React Dashboard connect seamlessly
   app.use((req: Request, res: Response, next: NextFunction) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-actor-role, x-actor-name');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-XSS-Protection', '1; mode=block');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    if (req.method === 'OPTIONS') {
+      res.status(204).end();
+      return;
+    }
     next();
   });
 
@@ -1184,7 +1191,13 @@ async function startServer() {
   }
 
   httpServer.listen(PORT, '0.0.0.0', () => {
-    console.log(`AyuLink Connected Healthcare OS running on http://0.0.0.0:${PORT}`);
+    console.log(`\n================================================================`);
+    console.log(`🚀 AYULINK HEALTHCARE OS BACKEND + DASHBOARD RUNNING!`);
+    console.log(`👉 Open in Browser:       http://localhost:${PORT}`);
+    console.log(`👉 Full Web Dashboard:    http://localhost:${PORT}/dashboard`);
+    console.log(`👉 REST + Socket.IO API:  http://localhost:${PORT}/api/state`);
+    console.log(`   (Note: Do NOT open 0.0.0.0 in browser — use localhost:${PORT})`);
+    console.log(`================================================================\n`);
   });
 }
 

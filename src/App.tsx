@@ -21,7 +21,17 @@ type ViewMode = 'split_os' | 'web_dashboard' | 'patient_mobile' | 'demo_guide';
 
 export function App() {
   const [state, setState] = useState<DatabaseState>(() => createInitialSeedState());
-  const [viewMode, setViewMode] = useState<ViewMode>('split_os');
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    if (typeof window !== 'undefined') {
+      if (window.location.hostname === '0.0.0.0') {
+        window.location.replace(window.location.href.replace('0.0.0.0', 'localhost'));
+      }
+      const p = window.location.pathname.toLowerCase();
+      if (p.includes('/dashboard')) return 'web_dashboard';
+      if (p.includes('/mobile')) return 'patient_mobile';
+    }
+    return 'split_os';
+  });
   const [darkMode, setDarkMode] = useState(false);
   const [activeDashboardRole, setActiveDashboardRole] = useState<UserRole>('hospital_admin');
   const [showArchModal, setShowArchModal] = useState(false);
